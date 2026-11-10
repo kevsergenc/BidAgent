@@ -1,0 +1,52 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           String      @id @default(cuid())
+  email        String      @unique
+  name         String?
+  password     String
+  tempPassword Boolean     @default(false)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  documents    Document[]
+  loginLogs    LoginLog[]
+}
+
+model LoginLog {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ip        String?
+  userAgent String?
+  loginAt   DateTime @default(now())
+}
+
+model Document {
+  id          String        @id @default(cuid())
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  fileName    String
+  fileSize    Int
+  pageCount   Int           @default(1)
+  createdAt   DateTime      @default(now())
+  chats       ChatMessage[]
+}
+
+model ChatMessage {
+  id         String   @id @default(cuid())
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  sender     String   // "user" | "assistant"
+  question   String?
+  answer     String?
+  createdAt  DateTime @default(now())
+}
+
