@@ -31,6 +31,8 @@ interface ChatScreenProps {
   onBackToUpload: () => void;
   isSidebarCollapsed: boolean;
   onExpandSidebar: () => void;
+  userImage?: string | null;
+  userName?: string | null;
 }
 
 export default function ChatScreen({
@@ -40,6 +42,8 @@ export default function ChatScreen({
   onBackToUpload,
   isSidebarCollapsed,
   onExpandSidebar,
+  userImage,
+  userName,
 }: ChatScreenProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
@@ -230,8 +234,17 @@ export default function ChatScreen({
                   <span>Şimdi</span>
                 </div>
               </div>
-              <div className="w-8 h-8 rounded-full bg-slate-800 text-white flex items-center justify-center shrink-0 text-xs font-semibold shadow-xs">
-                <UserIcon className="w-4 h-4" />
+              <div className="w-8 h-8 rounded-full overflow-hidden bg-slate-800 text-white flex items-center justify-center shrink-0 text-xs font-semibold shadow-xs">
+                {userImage ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={userImage}
+                    alt={userName || "Kullanıcı"}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span>{userName ? userName.charAt(0).toUpperCase() : <UserIcon className="w-4 h-4" />}</span>
+                )}
               </div>
             </div>
 

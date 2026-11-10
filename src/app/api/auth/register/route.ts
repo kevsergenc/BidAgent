@@ -37,11 +37,24 @@ export async function POST(request: Request) {
 
     const hashedPassword = await hashPassword(password);
 
+    let firstName = trimmedEmail.split("@")[0];
+    let lastName = "";
+    if (name && name.trim()) {
+      const parts = name.trim().split(/\s+/);
+      if (parts.length > 1) {
+        lastName = parts.pop() || "";
+        firstName = parts.join(" ");
+      } else {
+        firstName = parts[0];
+      }
+    }
+
     const user = await prisma.user.create({
       data: {
         email: trimmedEmail,
         password: hashedPassword,
-        name: name ? name.trim() : trimmedEmail.split("@")[0],
+        name: firstName,
+        surname: lastName,
       },
     });
 
@@ -70,6 +83,8 @@ export async function POST(request: Request) {
           id: user.id,
           email: user.email,
           name: user.name,
+          surname: user.surname,
+          image: user.image,
         },
       },
       { status: 201 }

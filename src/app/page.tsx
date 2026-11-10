@@ -7,8 +7,8 @@ import UploadZone from "@/components/UploadZone";
 import ChatScreen from "@/components/ChatScreen";
 import PdfViewer from "@/components/PdfViewer";
 import AuthCard from "@/components/AuthCard";
-import LoginHistoryModal from "@/components/LoginHistoryModal";
 import ChangePasswordModal from "@/components/ChangePasswordModal";
+import ProfileModal from "@/components/ProfileModal";
 import { Loader2 } from "lucide-react";
 
 export default function HomePage() {
@@ -22,8 +22,8 @@ export default function HomePage() {
   // UI layout states
   const [isPdfVisible, setIsPdfVisible] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   // Check current session
   useEffect(() => {
@@ -139,7 +139,7 @@ export default function HomePage() {
       <Navbar
         user={user}
         onLogout={handleLogout}
-        onOpenHistory={() => setIsHistoryModalOpen(true)}
+        onOpenProfile={() => setIsProfileOpen(true)}
         onOpenChangePassword={() => setIsChangePasswordOpen(true)}
       />
 
@@ -191,6 +191,8 @@ export default function HomePage() {
                   }}
                   isSidebarCollapsed={isSidebarCollapsed}
                   onExpandSidebar={() => setIsSidebarCollapsed(false)}
+                  userImage={user.image}
+                  userName={user.name}
                 />
               </div>
 
@@ -208,18 +210,21 @@ export default function HomePage() {
         </main>
       </div>
 
-      {/* Login History Modal */}
-      <LoginHistoryModal
-        isOpen={isHistoryModalOpen}
-        onClose={() => setIsHistoryModalOpen(false)}
-        userEmail={user.email}
-      />
-
       {/* Change Password Modal */}
       <ChangePasswordModal
         isOpen={isChangePasswordOpen}
         onClose={() => setIsChangePasswordOpen(false)}
         isTempPassword={user.tempPassword}
+      />
+
+      {/* Profile Modal */}
+      <ProfileModal
+        isOpen={isProfileOpen}
+        onClose={() => setIsProfileOpen(false)}
+        user={user}
+        onUpdateUser={(updatedUser) => {
+          setUser((prev: any) => ({ ...prev, ...updatedUser }));
+        }}
       />
     </div>
   );
