@@ -29,11 +29,9 @@ export async function POST(request: Request) {
       );
     }
 
-    // Generate a secure temporary password (e.g. "BA-" + random 6 characters uppercase/digits)
     const randomSuffix = crypto.randomBytes(3).toString("hex").toUpperCase();
     const tempPassword = `BA-${randomSuffix}`;
 
-    // Hash the temporary password and update the user
     const hashedTempPassword = await hashPassword(tempPassword);
 
     await prisma.user.update({
@@ -44,12 +42,11 @@ export async function POST(request: Request) {
       },
     });
 
-    // Send email with the temporary password
     const emailResult = await sendTemporaryPasswordEmail(user.email, tempPassword);
 
     return NextResponse.json({
       message: `Geçici şifreniz ${user.email} adresine gönderildi. Lütfen gelen kutunuzu kontrol edin.`,
-      tempPassword: tempPassword, // Provided so user can test immediately in development
+      tempPassword: tempPassword, 
       simulated: emailResult.simulated,
     });
   } catch (error: any) {

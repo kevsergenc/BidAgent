@@ -9,7 +9,6 @@ export async function GET() {
       return NextResponse.json({ user: null }, { status: 401 });
     }
 
-    // Also fetch last 5 login logs for the user
     const loginLogs = await prisma.loginLog.findMany({
       where: { userId: user.id },
       orderBy: { loginAt: "desc" },

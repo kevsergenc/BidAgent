@@ -5,6 +5,12 @@ import fs from "fs";
 import path from "path";
 
 const UPLOAD_DIR = path.join(process.cwd(), "uploads");
+const BACKEND_UPLOAD_DIR = path.join(
+  process.cwd(),
+  "backend",
+  "storage",
+  "uploads"
+);
 
 export async function GET(
   request: Request,
@@ -12,6 +18,7 @@ export async function GET(
 ) {
   try {
     const user = await getCurrentUser();
+
     if (!user) {
       return new NextResponse("Yetkisiz erişim.", { status: 401 });
     }
@@ -27,10 +34,25 @@ export async function GET(
       return new NextResponse("Döküman bulunamadı.", { status: 404 });
     }
 
-    const filePath = path.join(UPLOAD_DIR, document.fileName);
+    const backendFilePath = path.join(
+      BACKEND_UPLOAD_DIR,
+      document.fileName
+    );
+
+    const legacyFilePath = path.join(
+      UPLOAD_DIR,
+      document.fileName
+    );
+
+    const filePath = fs.existsSync(backendFilePath)
+      ? backendFilePath
+      : legacyFilePath;
 
     if (!fs.existsSync(filePath)) {
-      return new NextResponse("Döküman dosyası sunucuda bulunamadı.", { status: 404 });
+      return new NextResponse(
+        "Döküman dosyası sunucuda bulunamadı.",
+        { status: 404 }
+      );
     }
 
     const fileBuffer = await fs.promises.readFile(filePath);
@@ -41,13 +63,17 @@ export async function GET(
         "Content-Type": "application/pdf",
         "Content-Disposition": `inline; filename="${encodeURIComponent(document.title)}.pdf"`,
         "Content-Length": fileBuffer.length.toString(),
-        "Cache-Control": "public, max-age=3600",
+        "Cache-Control": "private, max-age=3600",
       },
     });
   } catch (error: any) {
-    return new NextResponse("Dosya okunurken bir hata oluştu: " + error.message, {
-      status: 500,
-    });
+    console.error("PDF okuma hatası:", error);
+
+    return new NextResponse(
+      "Dosya okunurken bir hata oluştu: " + error.message,
+      { status: 500 }
+    );
   }
 }
+
 

@@ -1,16 +1,19 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-// GET /api/documents/[id]/chat - Get all chat messages for a document
 export async function GET(
   request: Request,
   { params }: { params: { id: string } }
 ) {
   try {
     const user = await getCurrentUser();
+
     if (!user) {
-      return NextResponse.json({ error: "Oturum açmanız gerekiyor." }, { status: 401 });
+      return NextResponse.json(
+        { error: "Oturum açmanız gerekiyor." },
+        { status: 401 }
+      );
     }
 
     const document = await prisma.document.findFirst({
@@ -18,7 +21,10 @@ export async function GET(
     });
 
     if (!document) {
-      return NextResponse.json({ error: "Döküman bulunamadı." }, { status: 404 });
+      return NextResponse.json(
+        { error: "Doküman bulunamadı." },
+        { status: 404 }
+      );
     }
 
     const chats = await prisma.chatMessage.findMany({
@@ -27,23 +33,28 @@ export async function GET(
     });
 
     return NextResponse.json({ chats });
-  } catch (error: any) {
+  } catch (error) {
+    console.error("Chat history error:", error);
+
     return NextResponse.json(
-      { error: "Sohbet mesajları getirilirken hata oluştu: " + error.message },
+      { error: "Sohbet geçmişi yüklenemedi." },
       { status: 500 }
     );
   }
 }
 
-// POST /api/documents/[id]/chat - Ask a question
 export async function POST(
   request: Request,
   { params }: { params: { id: string } }
 ) {
   try {
     const user = await getCurrentUser();
+
     if (!user) {
-      return NextResponse.json({ error: "Oturum açmanız gerekiyor." }, { status: 401 });
+      return NextResponse.json(
+        { error: "Oturum açmanız gerekiyor." },
+        { status: 401 }
+      );
     }
 
     const document = await prisma.document.findFirst({
@@ -51,34 +62,99 @@ export async function POST(
     });
 
     if (!document) {
-      return NextResponse.json({ error: "Döküman bulunamadı." }, { status: 404 });
+      return NextResponse.json(
+        { error: "Doküman bulunamadı." },
+        { status: 404 }
+      );
     }
 
     const body = await request.json();
-    const { question } = body;
+    const question =
+      typeof body.question === "string" ? body.question.trim() : "";
 
-    if (!question || !question.trim()) {
-      return NextResponse.json({ error: "Lütfen bir soru yazınız." }, { status: 400 });
+    if (!question) {
+      return NextResponse.json(
+        { error: "Lütfen bir soru yazınız." },
+        { status: 400 }
+      );
     }
 
-    // Per user requirement:
-    // "eğer kullanıcı chat kısmına soru yazıp ok tuşuna basarsa chat kısmının üstünde yanıt alanı açılacak(bu alan şimdilik boş kalsın)"
+    if (question.length > 5000) {
+      return NextResponse.json(
+        { error: "Soru en fazla 5000 karakter olabilir." },
+        { status: 400 }
+      );
+    }
+
+    const backendUrl = (
+      process.env.FASTAPI_BASE_URL || "http://127.0.0.1:8000"
+    ).replace(/\/+$/, "");
+
+    const cookie = request.headers.get("cookie");
+
+    const agentResponse = await fetch(
+      `${backendUrl}/api/v1/agent/ask`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(cookie ? { Cookie: cookie } : {}),
+        },
+        body: JSON.stringify({
+          question,
+          document_id: document.id,
+        }),
+        cache: "no-store",
+      }
+    );
+
+    const agentData = await agentResponse.json();
+
+    if (!agentResponse.ok) {
+      console.error("FastAPI Agent error:", agentData);
+
+      return NextResponse.json(
+        {
+          error:
+            agentData.detail ||
+            agentData.error ||
+            "Agent soruyu yanıtlayamadı.",
+        },
+        { status: agentResponse.status }
+      );
+    }
+
+    if (
+      agentData.status !== "completed" ||
+      typeof agentData.answer !== "string" ||
+      !agentData.answer.trim()
+    ) {
+      return NextResponse.json(
+        { error: "Agent geçerli bir yanıt üretemedi." },
+        { status: 500 }
+      );
+    }
+
     const chat = await prisma.chatMessage.create({
       data: {
-        documentId: params.id,
+        documentId: document.id,
         sender: "user",
-        question: question.trim(),
-        answer: "", // Kept empty as requested
+        question,
+        answer: agentData.answer,
       },
     });
 
     return NextResponse.json({
-      message: "Soru kaydedildi.",
+      message: "Soru başarıyla yanıtlandı.",
       chat,
+      sources: agentData.sources || [],
+      planned_activities: agentData.planned_activities || [],
     });
-  } catch (error: any) {
+  } catch (error) {
+    console.error("Chat request error:", error);
+
     return NextResponse.json(
-      { error: "Soru gönderilirken hata oluştu: " + error.message },
+      { error: "Soru işlenirken beklenmeyen bir hata oluştu." },
       { status: 500 }
     );
   }

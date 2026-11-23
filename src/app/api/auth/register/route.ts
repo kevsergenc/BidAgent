@@ -16,7 +16,6 @@ export async function POST(request: Request) {
 
     const trimmedEmail = email.trim().toLowerCase();
 
-    // Check unique email constraint
     const existingUser = await prisma.user.findUnique({
       where: { email: trimmedEmail },
     });
@@ -58,7 +57,6 @@ export async function POST(request: Request) {
       },
     });
 
-    // Record initial registration/login timestamp in database
     const ip = request.headers.get("x-forwarded-for") || "127.0.0.1";
     const userAgent = request.headers.get("user-agent") || "Bilinmeyen Tarayıcı";
 
@@ -90,12 +88,11 @@ export async function POST(request: Request) {
       { status: 201 }
     );
 
-    // Set cookie
     response.cookies.set(COOKIE_NAME, token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
-      maxAge: 7 * 24 * 60 * 60, // 7 days
+      maxAge: 7 * 24 * 60 * 60, 
       path: "/",
     });
 

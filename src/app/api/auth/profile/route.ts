@@ -10,7 +10,6 @@ if (!fs.existsSync(AVATARS_DIR)) {
   fs.mkdirSync(AVATARS_DIR, { recursive: true });
 }
 
-// GET /api/auth/profile
 export async function GET() {
   try {
     const user = await getCurrentUser();
@@ -39,7 +38,6 @@ export async function GET() {
   }
 }
 
-// PUT /api/auth/profile - Update name, surname, and optionally profile image
 export async function PUT(request: Request) {
   try {
     const user = await getCurrentUser();

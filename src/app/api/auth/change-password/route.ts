@@ -19,7 +19,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // If current user is not on temporary password, verify old password
     const dbUser = await prisma.user.findUnique({
       where: { id: user.id },
     });

@@ -13,7 +13,6 @@ export async function GET(request: Request) {
       return new NextResponse("Dosya belirtilmedi.", { status: 400 });
     }
 
-    // Prevent directory traversal
     const safeFileName = path.basename(fileName);
     const filePath = path.join(AVATARS_DIR, safeFileName);
 

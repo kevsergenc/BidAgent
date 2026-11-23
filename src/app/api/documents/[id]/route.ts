@@ -6,7 +6,6 @@ import path from "path";
 
 const UPLOAD_DIR = path.join(process.cwd(), "uploads");
 
-// GET /api/documents/[id]
 export async function GET(
   request: Request,
   { params }: { params: { id: string } }
@@ -42,7 +41,6 @@ export async function GET(
   }
 }
 
-// DELETE /api/documents/[id]
 export async function DELETE(
   request: Request,
   { params }: { params: { id: string } }
@@ -64,7 +62,6 @@ export async function DELETE(
       return NextResponse.json({ error: "Döküman bulunamadı." }, { status: 404 });
     }
 
-    // Remove file from disk
     const filePath = path.join(UPLOAD_DIR, document.fileName);
     if (fs.existsSync(filePath)) {
       try {

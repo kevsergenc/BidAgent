@@ -46,6 +46,10 @@ npx prisma db push
 
 # 3. Geliştirici sunucusunu başlatın
 npm run dev
+
+#FastAPI'yi başlat:
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+#http://127.0.0.1:8000/docs
 ```
 
 Sunucu başladıktan sonra tarayıcınızdan **`http://localhost:3000`** adresine giderek uygulamayı kullanabilirsiniz.
