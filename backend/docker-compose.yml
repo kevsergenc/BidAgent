@@ -1,0 +1,26 @@
+﻿{
+    "services":  {
+                     "bidagent-api":  {
+                                          "volumes":  [
+                                                          "./storage:/app/storage",
+                                                          "../prisma:/prisma",
+                                                          "../uploads:/uploads"
+                                                      ],
+                                          "container_name":  "bidagent-api",
+                                          "environment":  {
+                                                              "BIDAGENT_OLLAMA_BASE_URL":  "http://host.docker.internal:11434"
+                                                          },
+                                          "restart":  "unless-stopped",
+                                          "build":  {
+                                                        "dockerfile":  "Dockerfile",
+                                                        "context":  "."
+                                                    },
+                                          "ports":  [
+                                                        "8000:8000"
+                                                    ],
+                                          "env_file":  [
+                                                           ".env"
+                                                       ]
+                                      }
+                 }
+}

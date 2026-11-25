@@ -6,6 +6,8 @@ from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from langchain_ollama import OllamaEmbeddings
 
+from app.core.config import get_settings
+
 
 BACKEND_DIR = Path(__file__).resolve().parents[3]
 CHROMA_DIR = BACKEND_DIR / "storage" / "chroma"
@@ -20,8 +22,11 @@ def get_vector_store() -> Chroma:
 
     CHROMA_DIR.mkdir(parents=True, exist_ok=True)
 
+    settings = get_settings()
+
     embeddings = OllamaEmbeddings(
         model=EMBEDDING_MODEL,
+        base_url=settings.ollama_base_url,
     )
 
     return Chroma(
