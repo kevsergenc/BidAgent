@@ -99,6 +99,13 @@ def plan_activities(question: str) -> list[str]:
         if any(keyword in normalized_question for keyword in keywords):
             activities.append(activity)
 
+    if "detect_risks" in activities:
+        activities = [
+            activity
+            for activity in activities
+            if activity not in {"extract_requirements", "generate_answer"}
+        ]
+
     question_indicators = [
         "kaç",
         "ne kadar",
@@ -124,10 +131,13 @@ def plan_activities(question: str) -> list[str]:
         )
     )
 
-    if has_question and "generate_answer" not in activities:
-        activities.append("generate_answer")
+    if (
+        has_question
+        and "generate_answer" not in activities
+        and "detect_risks" not in activities
+    ):
 
-    if not activities:
+     if not activities:
         activities.append("generate_answer")
 
     return [

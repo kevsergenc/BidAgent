@@ -1,12 +1,8 @@
-from langgraph.graph import END, START, StateGraph
+﻿from langgraph.graph import END, START, StateGraph
 
 from app.agents.state.agent_state import AgentState
 from app.agents.planner.activity_planner import plan_activities
-from app.agents.activities.detect_risks import execute_detect_risks
-
-from app.agents.activities.generate_answer import execute_generate_answer
-from app.agents.activities.search_documents import execute_search_documents
-from app.agents.activities.extract_requirements import execute_extract_requirements
+from app.mcp.client import call_mcp_tool
 
 
 ALLOWED_ACTIVITIES = {
@@ -65,17 +61,14 @@ def validation_node(state: AgentState) -> dict:
                 "status": "unsupported",
             }
 
-    return {
-        "error": None,
-        "status": "validated",
-    }
+    return {"error": None, "status": "validated"}
 
 
 def route_after_validation(state: AgentState) -> str:
     if state.get("error"):
         return "finish"
-
     return "execute"
+
 
 
 def execution_node(state: AgentState) -> dict:
@@ -85,13 +78,20 @@ def execution_node(state: AgentState) -> dict:
         answer_parts = []
         sources = []
 
-        for activity in state["planned_activities"]:
+        planned_activities = state["planned_activities"]
+        has_generate_answer = "generate_answer" in planned_activities
+
+        for activity in planned_activities:
+            common_args = {
+                "question": state["question"],
+                "user_id": state["user_id"],
+                "document_id": state["document_id"],
+            }
 
             if activity == "search_documents":
-                result = execute_search_documents(
-                    question=state["question"],
-                    user_id=state["user_id"],
-                    document_id=state["document_id"],
+                result = call_mcp_tool(
+                    tool_name="search_documents",
+                    **common_args,
                 )
 
                 retrieved_chunks = result["retrieved_chunks"]
@@ -106,17 +106,17 @@ def execution_node(state: AgentState) -> dict:
                 }
 
             elif activity == "extract_requirements":
-                result = execute_extract_requirements(
-                    question=state["question"],
-                    user_id=state["user_id"],
-                    document_id=state["document_id"],
+                result = call_mcp_tool(
+                    tool_name="extract_requirements",
+                    **common_args,
                     retrieved_chunks=retrieved_chunks or None,
                 )
 
-                answer_parts.append(
-                    "TEKNİK GEREKLİLİKLER\n\n"
-                    + result["requirements"]
-                )
+                if not has_generate_answer:
+                    answer_parts.append(
+                        "TEKNİK GEREKLİLİKLER\n\n"
+                        + result["requirements"]
+                    )
 
                 for source in result["sources"]:
                     if source not in sources:
@@ -125,17 +125,17 @@ def execution_node(state: AgentState) -> dict:
                 activity_results[activity] = result
 
             elif activity == "detect_risks":
-                result = execute_detect_risks(
-                    question=state["question"],
-                    user_id=state["user_id"],
-                    document_id=state["document_id"],
+                result = call_mcp_tool(
+                    tool_name="detect_risks",
+                    **common_args,
                     retrieved_chunks=retrieved_chunks or None,
                 )
 
-                answer_parts.append(
-                    "RİSK ANALİZİ\n\n"
-                    + result["risks"]
-                )
+                if not has_generate_answer:
+                    answer_parts.append(
+                        "RİSK ANALİZİ\n\n"
+                        + result["risks"]
+                    )
 
                 for source in result["sources"]:
                     if source not in sources:
@@ -144,11 +144,23 @@ def execution_node(state: AgentState) -> dict:
                 activity_results[activity] = result
 
             elif activity == "generate_answer":
-                result = execute_generate_answer(
-                    question=state["question"],
-                    user_id=state["user_id"],
-                    document_id=state["document_id"],
+                analysis_context = {
+                    "requirements": activity_results.get(
+                        "extract_requirements", {}
+                    ).get("requirements", ""),
+                    "risks": activity_results.get(
+                        "detect_risks", {}
+                    ).get("risks", ""),
+                }
+
+                if not any(analysis_context.values()):
+                    analysis_context = None
+
+                result = call_mcp_tool(
+                    tool_name="generate_answer",
+                    **common_args,
                     retrieved_chunks=retrieved_chunks or None,
+                    analysis_context=analysis_context,
                 )
 
                 answer_parts.append(result["answer"])
@@ -169,33 +181,22 @@ def execution_node(state: AgentState) -> dict:
         }
 
     except Exception as exc:
-        return {
-            "error": str(exc),
-            "status": "failed",
-        }
+        return {"error": str(exc), "status": "failed"}
 
 
 def build_agent_graph():
     workflow = StateGraph(AgentState)
-
     workflow.add_node("planner", planning_node)
     workflow.add_node("validator", validation_node)
     workflow.add_node("executor", execution_node)
-
     workflow.add_edge(START, "planner")
     workflow.add_edge("planner", "validator")
-
     workflow.add_conditional_edges(
         "validator",
         route_after_validation,
-        {
-            "execute": "executor",
-            "finish": END,
-        },
+        {"execute": "executor", "finish": END},
     )
-
     workflow.add_edge("executor", END)
-
     return workflow.compile()
 
 
@@ -215,9 +216,4 @@ def run_agent(
         "user_approved": user_approved,
         "status": "started",
     }
-
     return agent_graph.invoke(initial_state)
-
-
-
-

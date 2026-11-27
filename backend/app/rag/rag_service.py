@@ -8,6 +8,34 @@ from app.rag.vectorstore.vector_store import search_document_chunks
 
 logger = logging.getLogger(__name__)
 
+def find_responsibility_source(documents: list, question: str):
+    """Find the source chunk containing the relevant responsibility clause."""
+
+    normalized_question = question.casefold()
+
+    if any(word in normalized_question for word in ["nakliye", "taşıma"]):
+        keywords = ["nakliye", "taşıma"]
+    elif "garanti" in normalized_question:
+        keywords = [
+            "garanti şartları",
+            "garanti süresi",
+            "garanti",
+        ]
+    else:
+        keywords = [
+            "sorumluluğundadır",
+            "sorumludur",
+            "sorumluluğu",
+        ]
+
+    for document in documents:
+        content = document.page_content.casefold()
+
+        if any(keyword in content for keyword in keywords):
+            return document
+
+    return None
+
 
 def get_chat_model(num_predict: int | None = None) -> ChatOllama:
     """Create the configured Ollama chat model."""
@@ -125,10 +153,22 @@ def retrieve_relevant_chunks(
         reverse=True,
     )
 
-    return [
+    ranked_documents = [
         unique_documents[key]
-        for key in ranked_keys[:top_k]
+        for key in ranked_keys
     ]
+
+    if "garanti" in question.casefold():
+        warranty_documents = [
+            document
+            for document in ranked_documents
+            if "garanti" in document.page_content.casefold()
+        ]
+
+        if warranty_documents:
+            return warranty_documents[:top_k]
+
+    return ranked_documents[:top_k]
 
 def retrieve_risk_chunks(
     question: str,
@@ -195,6 +235,34 @@ def build_rag_prompt(
 
     normalized_question = question.casefold()
 
+    if "garanti" in normalized_question:
+        return f"""
+Sen BidAgent isimli ihale dokümanı analiz asistanısın.
+
+GÖREV:
+Garanti koşullarını kaynak metne dayanarak açıkla.
+
+KURALLAR:
+- Yalnızca verilen kaynakları kullan.
+- Garanti süresini, başlangıç zamanını ve kapsamını belirt.
+- Kaynakta açıkça belirtiliyorsa garantiyi sağlayan tarafı belirt.
+- Kaynakta açıkça yazmayan sorumlulukları varsayma.
+- Süre ve koşulları değiştirme.
+- OCR kaynaklı bozuk metinleri düzgün Türkçeyle ifade et.
+- Kaynak metnini olduğu gibi kopyalama.
+- Sorulan tüm alt soruları cevapla.
+- Cevabı kısa ve anlaşılır yaz.
+- Kaynak sayfasını belirt.
+
+SORU:
+{question}
+
+KAYNAKLAR:
+{context}
+
+CEVAP:
+"""
+
     responsibility_keywords = [
         "kim sorumlu",
         "kimin sorumluluğunda",
@@ -215,19 +283,22 @@ def build_rag_prompt(
 Sen BidAgent isimli ihale dokümanı analiz asistanısın.
 
 GÖREV:
-Kaynak metinlerde sorulan konuyla doğrudan ilgili sorumluluk hükmünü bul.
+Kullanıcının sorusuna kaynak metinlerdeki sorumluluk hükmüne dayanarak cevap ver.
 
 KURALLAR:
 - Yalnızca verilen kaynak metinlerini kullan.
 - "Yüklenicinin sorumluluğundadır" ifadesi Yükleniciyi belirtir.
 - "İdarenin sorumluluğundadır" ifadesi İdareyi belirtir.
-- Sadece soruyla ilgili sorumluluk hükmünü kullan.
-- Teslim yeri, adres veya kurum adını sorumlu taraf olarak yorumlama.
-- Birbirinden farklı hükümleri cevaba ekleme.
+- Sorumluluğun kapsamını açıkça belirt.
+- Teslim yeri veya adresi sorumlu taraf olarak yorumlama.
+- Farklı hükümleri birbirine karıştırma.
 - Kaynakta açık bir sorumlu taraf bulunmuyorsa bunu belirt.
-- Cevabı tek ve kısa bir cümleyle yaz.
-- Cümlenin sonuna ilgili kaynak sayfasını ekle.
+- Bozuk cümleleri düzgün Türkçeyle yeniden kur.
+- Tekrara düşme.
+- Kaynak sayfasını belirt.
 - Kaynakta olmayan bilgi üretme.
+- Kaynakta sorumluluk kapsamına giren birden fazla gider, zarar veya yükümlülük varsa hepsini ayrı ayrı belirt.
+- "Tüm giderler" gibi kapsayıcı ifadeleri daraltma; hükümde sayılan hiçbir sorumluluk kalemini atlama.
 
 SORU:
 {question}
@@ -249,8 +320,7 @@ GENEL KURALLAR:
 - Yalnızca soruyla ilgili bilgileri kullan.
 - Kaynakta bulunmayan bilgi ekleme veya tahmin yürütme.
 - Farklı konulara ait hükümleri birbirine karıştırma.
-- Bir bilgi açıkça belirtilmişse gereksiz yorum yapma.
-- Süre, tarih, miktar ve sorumlu taraf gibi bilgileri aynen koru.
+- Süre, tarih, miktar ve sorumlu taraf bilgilerini koru.
 - Cevabı kısa, açık ve doğrudan yaz.
 - İlgili kaynak sayfasını belirt.
 - Cevap kaynaklarda bulunmuyorsa bunu açıkça söyle.
@@ -265,13 +335,12 @@ KAYNAKLAR:
 CEVAP:
 """
 
-
-
 def ask_document(
     question: str,
     user_id: str,
     document_id: str,
     retrieved_chunks=None,
+    analysis_context: dict | None = None,
 ) -> dict:
     """Answer a question using shared or newly retrieved chunks."""
 
@@ -338,12 +407,23 @@ def ask_document(
 
     context = "\n\n".join(context_parts)
 
-    prompt = build_rag_prompt(
-        question=question,
-        context=context,
-    )
 
-    llm = get_chat_model(num_predict=250)
+    if analysis_context:
+        prompt = build_agent_synthesis_prompt(
+            question=question,
+            context=context,
+            analysis_context=analysis_context,
+        )
+    else:
+        prompt = build_rag_prompt(
+            question=question,
+            context=context,
+        )
+
+
+    llm = get_chat_model(
+    num_predict=400 if analysis_context else 250
+)
 
     generation_start = time.perf_counter()
     response = llm.invoke(prompt)
@@ -354,7 +434,52 @@ def ask_document(
         generation_duration,
     )
 
+    answer = response.content.strip()
+
+    if not analysis_context:
+        normalized_question = question.casefold()
+
+        responsibility_keywords = [
+            "kim sorumlu",
+            "kimin sorumluluğunda",
+            "kim karşılar",
+            "kim öder",
+            "kime ait",
+            "sorumluluk",
+            "sorumludur",
+        ]
+
+        is_responsibility_question = any(
+            keyword in normalized_question
+            for keyword in responsibility_keywords
+        )
+
+        if is_responsibility_question:
+            source_document = find_responsibility_source(
+                documents,
+                question,
+            )
+
+            if source_document:
+                import re
+
+                answer = re.sub(
+                    r"\s*\(Kaynak:\s*Sayfa\s*\d+\)",
+                    "",
+                    answer,
+                    flags=re.IGNORECASE,
+                ).strip()
+
+                source_page = source_document.metadata.get(
+                    "page_number"
+                )
+
+                answer = (
+                    f"{answer.rstrip('. ')}. "
+                    f"(Kaynak: Sayfa {source_page})"
+                )
+
     return {
-        "answer": response.content,
+        "answer": answer,
         "sources": sources,
     }
